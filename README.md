@@ -2,6 +2,8 @@
 
 A Chrome extension that automatically dismisses ChatGPT’s “Thanks for trying ChatGPT” popup by clicking “Stay logged out,” keeping the site usable while logged out.
 
+<img width="1280" height="800" alt="No Thanks, ChatGPT - Chrome Extension" src="https://github.com/user-attachments/assets/caa1ee74-8f29-4709-8d5e-b9d522a57032" />
+
 ## What It Does
 - Auto-clicks the “Stay logged out” link when the login modal appears.
 - As a fallback, removes that specific modal if clicking isn’t possible.
