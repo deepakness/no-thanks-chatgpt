@@ -17,6 +17,15 @@
     }
   }
 
+  function focusPromptTextarea() {
+    setTimeout(() => {
+      const textarea = document.querySelector('#prompt-textarea');
+      if (textarea) {
+        textarea.focus();
+      }
+    }, 100);
+  }
+
   function findStayLoggedOut(root = document) {
     const candidates = root.querySelectorAll('a, button, [role="button"], [data-testid], [class]');
     for (const el of candidates) {
@@ -44,6 +53,7 @@
     if (link) {
       handledOnce = true;
       safeClick(link);
+      focusPromptTextarea();
       return true;
     }
     // As a last resort, remove the dialog if present
