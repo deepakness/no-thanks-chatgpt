@@ -1,11 +1,18 @@
 // No Thanks, ChatGPT — content script
-// Goal: Never show the “Thanks for trying ChatGPT” dialog when browsing logged out.
+// Goal: Never show the "Thanks for trying ChatGPT" dialog, "Try Go, Free" popup, cookie notice, or promo cards when browsing logged out.
 
 (() => {
   const TEXT_STAY_LOGGED_OUT = /\bstay\s+logged\s+out\b/i;
   const TEXT_THANKS_DIALOG = /\bthanks\s+for\s+trying\s+chatgpt\b/i;
+  const TEXT_MAYBE_LATER = /\bmaybe\s+later\b/i;
+  const TEXT_TRY_GO_FREE = /\btry\s+go,?\s+free\b/i;
+  const TEXT_REJECT_COOKIES = /\breject\s+non-essential\b/i;
+  const TEXT_COOKIE_DIALOG = /\bwe\s+use\s+cookies\b/i;
+  const TEXT_PROMO_CARD = /\bget\s+smarter\s+responses,?\s+upload\s+files\b/i;
 
   let handledOnce = false;
+  let handledGoPopup = false;
+  let handledCookies = false;
 
   function safeClick(el) {
     try {
@@ -37,13 +44,138 @@
   }
 
   function removeThanksDialog(root = document) {
-    // Fallback: if we can’t click the link, hide/remove the dialog itself
+    // Fallback: if we can't click the link, hide/remove the dialog itself
     const dialogs = root.querySelectorAll('[role="dialog"], [id^="radix-"]');
     for (const d of dialogs) {
       const txt = (d.textContent || '').toLowerCase();
       if (TEXT_THANKS_DIALOG.test(txt)) {
         d.remove();
       }
+    }
+  }
+
+  function findMaybeLater(root = document) {
+    const candidates = root.querySelectorAll('button, [role="button"]');
+    for (const el of candidates) {
+      const txt = (el.textContent || '').trim();
+      if (!txt) continue;
+      if (TEXT_MAYBE_LATER.test(txt)) return el;
+    }
+    return null;
+  }
+
+  function isGoPopup(el) {
+    const txt = (el.textContent || '');
+    return TEXT_TRY_GO_FREE.test(txt);
+  }
+
+  function removeGoPopup(root = document) {
+    // Fallback: if we can't click "Maybe later", hide/remove the dialog itself
+    const dialogs = root.querySelectorAll('[role="dialog"], [id^="radix-"]');
+    for (const d of dialogs) {
+      if (isGoPopup(d)) {
+        d.remove();
+      }
+    }
+  }
+
+  function tryHandleGoPopup(root = document) {
+    if (handledGoPopup) return false;
+    // Only proceed if this looks like the Go popup
+    const dialogs = root.querySelectorAll('[role="dialog"], [id^="radix-"]');
+    let foundGoDialog = false;
+    for (const d of dialogs) {
+      if (isGoPopup(d)) {
+        foundGoDialog = true;
+        break;
+      }
+    }
+    if (!foundGoDialog && root !== document && !isGoPopup(root)) return false;
+    
+    const btn = findMaybeLater(root);
+    if (btn) {
+      handledGoPopup = true;
+      safeClick(btn);
+      focusPromptTextarea();
+      return true;
+    }
+    // As a last resort, remove the dialog if present
+    removeGoPopup(root);
+    return false;
+  }
+
+  function findRejectCookies(root = document) {
+    const candidates = root.querySelectorAll('button, [role="button"]');
+    for (const el of candidates) {
+      const txt = (el.textContent || '').trim();
+      if (!txt) continue;
+      if (TEXT_REJECT_COOKIES.test(txt)) return el;
+    }
+    return null;
+  }
+
+  function isCookieDialog(el) {
+    const txt = (el.textContent || '');
+    return TEXT_COOKIE_DIALOG.test(txt);
+  }
+
+  function removeCookieDialog(root = document) {
+    // Fallback: if we can't click "Reject non-essential", hide/remove the dialog itself
+    const dialogs = root.querySelectorAll('[role="dialog"]');
+    for (const d of dialogs) {
+      if (isCookieDialog(d)) {
+        d.remove();
+      }
+    }
+  }
+
+  function tryHandleCookies(root = document) {
+    if (handledCookies) return false;
+    // Only proceed if this looks like the cookie dialog
+    const dialogs = root.querySelectorAll('[role="dialog"]');
+    let foundCookieDialog = false;
+    for (const d of dialogs) {
+      if (isCookieDialog(d)) {
+        foundCookieDialog = true;
+        break;
+      }
+    }
+    if (!foundCookieDialog && root !== document && !isCookieDialog(root)) return false;
+    
+    const btn = findRejectCookies(root);
+    if (btn) {
+      handledCookies = true;
+      safeClick(btn);
+      focusPromptTextarea();
+      return true;
+    }
+    // As a last resort, remove the dialog if present
+    removeCookieDialog(root);
+    return false;
+  }
+
+  function isPromoCard(el) {
+    const txt = (el.textContent || '');
+    return TEXT_PROMO_CARD.test(txt);
+  }
+
+  function removePromoCard(root = document) {
+    // Remove the "Get smarter responses" promotional card above input
+    const asides = root.querySelectorAll('aside');
+    for (const aside of asides) {
+      if (isPromoCard(aside)) {
+        // Remove the parent container that holds the aside
+        const container = aside.closest('.absolute.bottom-full');
+        if (container) {
+          container.remove();
+        } else {
+          aside.remove();
+        }
+      }
+    }
+    // Also check if root itself is an aside or container
+    if (root.tagName === 'ASIDE' && isPromoCard(root)) {
+      root.remove();
     }
   }
 
@@ -63,18 +195,21 @@
 
   // Initial attempt after the page becomes idle
   tryHandle();
+  tryHandleGoPopup();
+  tryHandleCookies();
+  removePromoCard();
 
   // Observe DOM for dynamically inserted popups
   const observer = new MutationObserver((mutations) => {
-    if (handledOnce) return;
     for (const m of mutations) {
       // Check added nodes quickly
       for (const n of m.addedNodes) {
         if (!(n instanceof Element)) continue;
-        if (tryHandle(n)) {
-          observer.disconnect();
-          return;
-        }
+        if (!handledOnce) tryHandle(n);
+        if (!handledGoPopup) tryHandleGoPopup(n);
+        if (!handledCookies) tryHandleCookies(n);
+        // Promo card can reappear, always check
+        removePromoCard(n);
       }
     }
   });
@@ -89,10 +224,13 @@
   // Light fallback polling for the first few seconds to reduce flicker
   const start = Date.now();
   const interval = setInterval(() => {
-    if (handledOnce || Date.now() - start > 8000) {
+    if (Date.now() - start > 8000) {
       clearInterval(interval);
       return;
     }
-    tryHandle();
+    if (!handledOnce) tryHandle();
+    if (!handledGoPopup) tryHandleGoPopup();
+    if (!handledCookies) tryHandleCookies();
+    removePromoCard();
   }, 250);
 })();
