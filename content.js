@@ -1,5 +1,5 @@
 // No Thanks, ChatGPT — content script
-// Goal: Never show the "Thanks for trying ChatGPT" dialog, "Try Go, Free" popup, cookie notice, or promo cards when browsing logged out.
+// Goal: Never show ChatGPT popups, Google sign-in prompts, cookie notices, signup buttons, sidebar upsells, or promo cards when browsing logged out.
 
 (() => {
   const TEXT_STAY_LOGGED_OUT = /\bstay\s+logged\s+out\b/i;
@@ -9,10 +9,121 @@
   const TEXT_REJECT_COOKIES = /\breject\s+non-essential\b/i;
   const TEXT_COOKIE_DIALOG = /\bwe\s+use\s+cookies\b/i;
   const TEXT_PROMO_CARD = /\bget\s+smarter\s+responses,?\s+upload\s+files\b/i;
+  const TEXT_SIDEBAR_LOGIN_PANE = /\bget\s+responses\s+tailored\s+to\s+you\b[\s\S]*\blog\s+in\s+to\s+get\s+answers\s+based\s+on\s+saved\s+chats\b/i;
+  const TEXT_GOOGLE_SIGN_IN_PROMPT = /\bsign\s+in\s+to\s+chatgpt(?:\.com)?\s+with\s+google(?:\.com)?\b/i;
+  const TEXT_CONTINUE_AS = /\bcontinue\s+as\b/i;
+  const SIDEBAR_LOGIN_PANE_SELECTOR = [
+    '.sticky.bottom-0',
+    '[class*="sidebar-login-pane-bg"]',
+  ].join(',');
+  const SIDEBAR_LOGIN_PANE_STYLE_ID = 'no-thanks-chatgpt-sidebar-login-pane-style';
+  const SIGNUP_BUTTON_SELECTOR = '[data-testid="signup-button"]';
+  const SIGNUP_BUTTON_STYLE_ID = 'no-thanks-chatgpt-signup-button-style';
+  const GOOGLE_PROMPT_SELECTOR = [
+    '#credential_picker_container',
+    'iframe[src*="accounts.google.com/gsi/iframe/select"]',
+    'iframe[src*="accounts.google.com/gsi/iframe/intermediate"]',
+  ].join(',');
+  const GOOGLE_PROMPT_STYLE_ID = 'no-thanks-chatgpt-google-prompt-style';
 
   let handledOnce = false;
   let handledGoPopup = false;
   let handledCookies = false;
+  let googleFedCmPatched = false;
+
+  function isGoogleIdentityRequest(options) {
+    const providers = options?.identity?.providers;
+    if (!Array.isArray(providers)) return false;
+
+    return providers.some((provider) => {
+      const configURL = `${provider?.configURL || provider?.configUrl || ''}`.toLowerCase();
+      return configURL.includes('accounts.google.com') || configURL.includes('google.com/gsi');
+    });
+  }
+
+  function blockGoogleFedCmPrompt() {
+    if (googleFedCmPatched) return;
+    googleFedCmPatched = true;
+
+    const credentials = navigator.credentials;
+    const originalGet = credentials?.get;
+    if (typeof originalGet !== 'function') return;
+
+    const blockedGet = function (options) {
+      if (isGoogleIdentityRequest(options) && !navigator.userActivation?.isActive) {
+        return Promise.reject(new DOMException('Google sign-in prompt blocked by No Thanks, ChatGPT.', 'AbortError'));
+      }
+
+      return originalGet.apply(this, arguments);
+    };
+
+    try {
+      Object.defineProperty(credentials, 'get', {
+        configurable: false,
+        writable: false,
+        value: blockedGet,
+      });
+    } catch (_) {
+      try {
+        credentials.get = blockedGet;
+      } catch (_) {
+        // ignore
+      }
+    }
+  }
+
+  function injectGooglePromptStyles() {
+    if (document.getElementById(GOOGLE_PROMPT_STYLE_ID)) return;
+
+    const style = document.createElement('style');
+    style.id = GOOGLE_PROMPT_STYLE_ID;
+    style.textContent = `
+      #credential_picker_container,
+      iframe[src*="accounts.google.com/gsi/iframe/select"],
+      iframe[src*="accounts.google.com/gsi/iframe/intermediate"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+    `;
+
+    (document.head || document.documentElement)?.appendChild(style);
+  }
+
+  function injectSidebarLoginPaneStyles() {
+    if (document.getElementById(SIDEBAR_LOGIN_PANE_STYLE_ID)) return;
+
+    const style = document.createElement('style');
+    style.id = SIDEBAR_LOGIN_PANE_STYLE_ID;
+    style.textContent = `
+      [class*="sidebar-login-pane-bg"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+    `;
+
+    (document.head || document.documentElement)?.appendChild(style);
+  }
+
+  function injectSignupButtonStyles() {
+    if (document.getElementById(SIGNUP_BUTTON_STYLE_ID)) return;
+
+    const style = document.createElement('style');
+    style.id = SIGNUP_BUTTON_STYLE_ID;
+    style.textContent = `
+      ${SIGNUP_BUTTON_SELECTOR} {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+    `;
+
+    (document.head || document.documentElement)?.appendChild(style);
+  }
 
   function safeClick(el) {
     try {
@@ -21,6 +132,46 @@
       el.dispatchEvent?.(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true }));
     } catch (_) {
       // ignore
+    }
+  }
+
+  function isGoogleSignInPrompt(el) {
+    const txt = (el.textContent || '');
+    return TEXT_GOOGLE_SIGN_IN_PROMPT.test(txt) && TEXT_CONTINUE_AS.test(txt);
+  }
+
+  function removeGoogleSignInPrompt(root = document) {
+    injectGooglePromptStyles();
+
+    const prompts = new Set();
+    if (root instanceof Element && root.matches(GOOGLE_PROMPT_SELECTOR)) {
+      prompts.add(root);
+    }
+
+    const matchingPrompts = root.querySelectorAll?.(GOOGLE_PROMPT_SELECTOR) || [];
+    for (const prompt of matchingPrompts) {
+      prompts.add(prompt);
+    }
+
+    for (const prompt of prompts) {
+      const container = prompt.closest?.('#credential_picker_container') || prompt;
+      container.remove();
+    }
+
+    const dialogs = root.querySelectorAll?.('[role="dialog"], [aria-modal="true"]') || [];
+    for (const dialog of dialogs) {
+      if (isGoogleSignInPrompt(dialog)) {
+        const closeButton = dialog.querySelector('button[aria-label*="Close" i], [role="button"][aria-label*="Close" i]');
+        if (closeButton) {
+          safeClick(closeButton);
+        } else {
+          dialog.remove();
+        }
+      }
+    }
+
+    if (root instanceof Element && isGoogleSignInPrompt(root)) {
+      root.remove();
     }
   }
 
@@ -159,6 +310,49 @@
     return TEXT_PROMO_CARD.test(txt);
   }
 
+  function isSidebarLoginPane(el) {
+    const txt = (el.textContent || '');
+    return TEXT_SIDEBAR_LOGIN_PANE.test(txt);
+  }
+
+  function removeSidebarLoginPane(root = document) {
+    injectSidebarLoginPaneStyles();
+
+    const panes = new Set();
+    const ancestor = root instanceof Element ? root.closest(SIDEBAR_LOGIN_PANE_SELECTOR) : null;
+    if (ancestor) {
+      panes.add(ancestor);
+    }
+
+    if (root instanceof Element && root.matches(SIDEBAR_LOGIN_PANE_SELECTOR)) {
+      panes.add(root);
+    }
+
+    const candidates = root.querySelectorAll?.(SIDEBAR_LOGIN_PANE_SELECTOR) || [];
+    for (const candidate of candidates) {
+      panes.add(candidate);
+    }
+
+    for (const pane of panes) {
+      if (isSidebarLoginPane(pane)) {
+        pane.remove();
+      }
+    }
+  }
+
+  function removeSignupButton(root = document) {
+    injectSignupButtonStyles();
+
+    if (root instanceof Element && root.matches(SIGNUP_BUTTON_SELECTOR)) {
+      root.remove();
+    }
+
+    const buttons = root.querySelectorAll?.(SIGNUP_BUTTON_SELECTOR) || [];
+    for (const button of buttons) {
+      button.remove();
+    }
+  }
+
   function removePromoCard(root = document) {
     // Remove the "Get smarter responses" promotional card above input
     const asides = root.querySelectorAll('aside');
@@ -194,32 +388,50 @@
   }
 
   // Initial attempt after the page becomes idle
+  blockGoogleFedCmPrompt();
+  injectGooglePromptStyles();
+  injectSidebarLoginPaneStyles();
+  injectSignupButtonStyles();
   tryHandle();
   tryHandleGoPopup();
   tryHandleCookies();
+  removeGoogleSignInPrompt();
   removePromoCard();
+  removeSidebarLoginPane();
+  removeSignupButton();
 
   // Observe DOM for dynamically inserted popups
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
       // Check added nodes quickly
       for (const n of m.addedNodes) {
-        if (!(n instanceof Element)) continue;
-        if (!handledOnce) tryHandle(n);
-        if (!handledGoPopup) tryHandleGoPopup(n);
-        if (!handledCookies) tryHandleCookies(n);
+        const nodeRoot = n instanceof Element ? n : n.parentElement;
+        if (!nodeRoot) continue;
+        if (!handledOnce) tryHandle(nodeRoot);
+        if (!handledGoPopup) tryHandleGoPopup(nodeRoot);
+        if (!handledCookies) tryHandleCookies(nodeRoot);
+        removeGoogleSignInPrompt(nodeRoot);
         // Promo card can reappear, always check
-        removePromoCard(n);
+        removePromoCard(nodeRoot);
+        removeSidebarLoginPane(nodeRoot);
+        removeSignupButton(nodeRoot);
       }
     }
   });
 
-  if (document.documentElement) {
+  function startObserver() {
+    if (!document.documentElement) {
+      setTimeout(startObserver, 0);
+      return;
+    }
+
     observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
     });
   }
+
+  startObserver();
 
   // Light fallback polling for the first few seconds to reduce flicker
   const start = Date.now();
@@ -231,6 +443,9 @@
     if (!handledOnce) tryHandle();
     if (!handledGoPopup) tryHandleGoPopup();
     if (!handledCookies) tryHandleCookies();
+    removeGoogleSignInPrompt();
     removePromoCard();
+    removeSidebarLoginPane();
+    removeSignupButton();
   }, 250);
 })();

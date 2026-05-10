@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "No Thanks, ChatGPT",
-  "version": "2.0.0",
-  "description": "Automatically dismisses popups, cookie notices, and promotional cards on ChatGPT so you can start chatting immediately.",
+  "version": "2.0.4",
+  "description": "Automatically dismisses popups, Google sign-in prompts, cookie notices, signup buttons, sidebar upsells, and promotional cards on ChatGPT so you can start chatting immediately.",
   "author": "DeepakNess",
   "icons": {
     "16": "icons/icon16.png",
@@ -24,7 +24,8 @@
         "*://*.chatgpt.com/*"
       ],
       "js": ["content.js"],
-      "run_at": "document_idle"
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ]
 }

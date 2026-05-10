@@ -7,7 +7,10 @@ A Chrome extension that automatically dismisses all annoying popups on ChatGPT a
 ## What It Does
 - **"Thanks for trying ChatGPT" dialog** — auto-clicks "Stay logged out"
 - **"Try Go, Free" upsell popup** — auto-clicks "Maybe later"
+- **Google sign-in prompt** — blocks/removes the account chooser shown on ChatGPT pages
 - **Cookie consent banner** — auto-clicks "Reject non-essential"
+- **Signup button** — hides/removes the top-bar "Sign up for free" button
+- **Sidebar login pane** — hides/removes the "Get responses tailored to you" prompt
 - **Promotional cards** — removes the "Get smarter responses" card above the input box
 - Automatically focuses the prompt textarea so you can start typing immediately
 - As a fallback, removes modals if clicking isn't possible
@@ -42,7 +45,8 @@ Justification: The content script must run on ChatGPT pages to detect and dismis
 ## How It Works
 - A `MutationObserver` watches for popups and banners to be added to the DOM.
 - On detection, the script searches for dismiss buttons ("Stay logged out", "Maybe later", "Reject non-essential") and clicks them.
-- Promotional cards are removed directly when detected.
+- Google sign-in prompts are blocked early and removed if they are injected as page iframes.
+- The signup button, sidebar login pane, and promotional cards are removed directly when detected.
 - After dismissing popups, automatically focuses the prompt textarea.
 - If buttons cannot be clicked, the specific modal containers are removed as a fallback.
 
