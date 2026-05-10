@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "No Thanks, ChatGPT",
-  "version": "2.0.4",
+  "version": "2.1.0",
   "description": "Automatically dismisses popups, Google sign-in prompts, cookie notices, signup buttons, sidebar upsells, and promotional cards on ChatGPT so you can start chatting immediately.",
   "author": "DeepakNess",
   "icons": {
