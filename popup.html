@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>No Thanks, ChatGPT</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup">
+    <header class="header">
+      <img src="icons/icon48.png" alt="" width="32" height="32">
+      <div>
+        <h1>No Thanks, ChatGPT</h1>
+        <p>Popup blocker and local chat export.</p>
+      </div>
+    </header>
+
+    <section class="panel">
+      <h2>Export conversations</h2>
+      <p>Export the active ChatGPT conversation locally. Briefly scrolls to load visible turns, then restores your position. Scroll up first if older history is not on the page yet.</p>
+
+      <div class="format-grid" aria-label="Export format">
+        <button class="format is-selected" type="button" data-format="markdown" aria-pressed="true">MD</button>
+        <button class="format" type="button" data-format="json" aria-pressed="false">JSON</button>
+        <button class="format" type="button" data-format="html" aria-pressed="false">HTML</button>
+        <button class="format" type="button" data-format="text" aria-pressed="false">TXT</button>
+      </div>
+
+      <label class="check"><input type="checkbox" data-option="includeSources" checked> Include sources</label>
+      <label class="check"><input type="checkbox" data-option="includeMetadata" checked> Include metadata</label>
+
+      <div class="actions">
+        <button class="secondary" type="button" data-action="copy" disabled aria-disabled="true">Copy</button>
+        <button class="primary" type="button" data-action="export" disabled aria-disabled="true">Export</button>
+      </div>
+    </section>
+
+    <section class="note">
+      <h2>Status</h2>
+      <p class="status" data-status>Open or refresh a ChatGPT conversation tab.</p>
+    </section>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
