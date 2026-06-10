@@ -96,15 +96,23 @@
   async function copyExport() {
     if (els.copy?.disabled) return;
 
+    setStatus('Preparing copy…', 'info');
     const response = await sendToActiveTab({
       format: state.format,
       includeMetadata: els.includeMetadata.checked,
       includeSources: els.includeSources.checked,
-      type: 'export-copy',
+      type: 'export-content',
     });
 
     if (!response?.ok) {
-      setStatus(response?.error || 'Copy failed. Try again.', 'warn');
+      setStatus(response?.error || 'Copy failed. Use Export to save a local file instead.', 'warn');
+      return;
+    }
+
+    try {
+      await writeClipboard(response.content);
+    } catch (_) {
+      setStatus('Copy failed. Use Export to save a local file instead.', 'warn');
       return;
     }
 
@@ -133,6 +141,25 @@
       formatSuccessStatus(`Exported ${FORMATS[state.format].label} for`, response),
       response.mayBeIncomplete ? 'warn' : 'success',
     );
+  }
+
+  async function writeClipboard(text) {
+    if (!text) throw new Error('No content to copy');
+
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand('copy');
+    textarea.remove();
+    if (!ok) throw new Error('Copy command failed');
   }
 
   function isChatGptUrl(url) {

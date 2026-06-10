@@ -56,7 +56,7 @@ Justification: The content script must run on ChatGPT pages to detect and dismis
 - A separate isolated content script adds a small export button on ChatGPT pages.
 - Clicking the extension icon opens a popup with the same copy/export options for the active ChatGPT tab.
 - The exporter scans the currently rendered conversation, separates user and assistant turns, preserves common formatting such as headings, lists, links, tables, and code blocks, then creates a local file.
-- Exports only messages currently loaded in the page DOM. Before export, the extension briefly scrolls through the chat to load virtualized turns (then restores your scroll position). It does not call private ChatGPT APIs.
+- Exports only messages currently loaded in the page DOM. Copy and Export briefly scroll through the chat to load virtualized turns (then restore your scroll position). It does not call private ChatGPT APIs.
 - Assistant “thinking” blocks (for example, “Thought for …”) are omitted from exports.
 - If fewer messages export than visible turns, the UI warns that the export may be incomplete.
 

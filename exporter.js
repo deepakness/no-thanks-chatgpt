@@ -343,7 +343,7 @@
     host.toggleAttribute('data-open', open);
 
     if (open) {
-      updateStatusFromConversation(null, { prepare: true });
+      updateStatusFromConversation();
       requestAnimationFrame(() => {
         positionMenu();
         const selected = els.formatButtons.find((button) => button.dataset.format === state.format);
@@ -401,12 +401,7 @@
     }
   }
 
-  async function updateStatusFromConversation(extra, options = {}) {
-    if (options.prepare) {
-      setStatus({ hint: SCROLL_HINT, main: 'Loading conversation messages…' }, 'info');
-      await prepareConversationDom();
-    }
-
+  function updateStatusFromConversation(extra) {
     const data = collectConversation();
     updateActionStates(data.messageCount);
 
@@ -497,8 +492,11 @@
     return document.querySelectorAll('[data-message-author-role]').length;
   }
 
-  function finalizeMessages(messages) {
-    return dedupeMessages(messages).map((message, index) => ({
+  function finalizeMessages(messages, options = {}) {
+    const cleaned = dedupeMessages(messages);
+    const finalized = options.mergeAdjacentSameRole ? mergeAdjacentSameRoleMessages(cleaned) : cleaned;
+
+    return finalized.map((message, index) => ({
       ...message,
       index: index + 1,
     }));
@@ -529,7 +527,9 @@
       ];
 
       for (const candidate of candidates) {
-        const finalized = finalizeMessages(candidate.messages);
+        const finalized = finalizeMessages(candidate.messages, {
+          mergeAdjacentSameRole: candidate.extractionMethod !== 'turn',
+        });
         if (finalized.length > best.messages.length) {
           best = { extractionMethod: candidate.extractionMethod, messages: finalized };
         }
@@ -800,6 +800,54 @@
     return unique;
   }
 
+  function mergeAdjacentSameRoleMessages(messages) {
+    const merged = [];
+
+    for (const message of messages) {
+      const previous = merged[merged.length - 1];
+      if (!previous || previous.role !== message.role) {
+        merged.push({
+          ...message,
+          links: dedupeLinks(message.links),
+        });
+        continue;
+      }
+
+      merged[merged.length - 1] = {
+        ...previous,
+        contentHtml: joinHtmlContent(previous.contentHtml, message.contentHtml),
+        contentMarkdown: normalizeMarkdown(joinTextContent(previous.contentMarkdown, message.contentMarkdown)),
+        contentText: normalizeReadableText(joinTextContent(previous.contentText, message.contentText)),
+        links: dedupeLinks([...(previous.links || []), ...(message.links || [])]),
+        timestamp: previous.timestamp || message.timestamp,
+      };
+    }
+
+    return merged;
+  }
+
+  function joinTextContent(first, second) {
+    return [first, second].map((value) => `${value || ''}`.trim()).filter(Boolean).join('\n\n');
+  }
+
+  function joinHtmlContent(first, second) {
+    return [first, second].map((value) => `${value || ''}`.trim()).filter(Boolean).join('\n');
+  }
+
+  function dedupeLinks(links = []) {
+    const deduped = [];
+    const seen = new Set();
+
+    for (const link of links) {
+      const href = link?.href || '';
+      if (!href || seen.has(href)) continue;
+      seen.add(href);
+      deduped.push(link);
+    }
+
+    return deduped;
+  }
+
   function roleFromHeading(node) {
     const text = normalizePlainText(node.textContent || '').replace(/:$/, '');
     if (/^You said$/i.test(text)) return 'user';
@@ -918,6 +966,7 @@
 
     for (const child of Array.from(node.childNodes)) {
       if (child.nodeType === Node.TEXT_NODE) {
+        if (!normalizePlainText(child.textContent || '')) continue;
         const text = normalizeInlineText(child.textContent || '');
         if (text) output += text;
         continue;
@@ -1279,7 +1328,7 @@
     const format = FORMATS[selectedFormat];
     const content = formatExport(data, selectedFormat, options);
     const filename = getFileName(data.title, format.extension);
-    return { content, data, filename, format };
+    return { content, data, filename, format, formatName: selectedFormat };
   }
 
   function buildExportOptions(message) {
@@ -1300,6 +1349,24 @@
     };
   }
 
+  function buildExportResponse(result, options = {}) {
+    const response = {
+      domTurnCount: result.data.domTurnCount,
+      filename: result.filename,
+      format: result.formatName,
+      mayBeIncomplete: result.data.mayBeIncomplete,
+      messageCount: result.data.messageCount,
+      ok: true,
+      title: result.data.title,
+    };
+
+    if (options.includeContent) {
+      response.content = result.content;
+    }
+
+    return response;
+  }
+
   function bindRuntimeMessages() {
     if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return;
 
@@ -1317,17 +1384,15 @@
       ensureUi();
 
       if (message.type === 'status') {
-        prepareConversationDom()
-          .then(() => {
-            sendResponse(buildStatusResponse(collectConversation()));
-          })
-          .catch(() => {
-            sendResponse({
-              error: 'Could not load conversation messages on this page.',
-              ok: false,
-            });
+        try {
+          sendResponse(buildStatusResponse(collectConversation()));
+        } catch (_) {
+          sendResponse({
+            error: 'Could not read conversation messages on this page.',
+            ok: false,
           });
-        return true;
+        }
+        return false;
       }
 
       if (message.type === 'export-download') {
@@ -1344,14 +1409,7 @@
             }
 
             downloadContent(result);
-            sendResponse({
-              domTurnCount: result.data.domTurnCount,
-              filename: result.filename,
-              mayBeIncomplete: result.data.mayBeIncomplete,
-              messageCount: result.data.messageCount,
-              ok: true,
-              title: result.data.title,
-            });
+            sendResponse(buildExportResponse(result));
           })
           .catch(() => {
             sendResponse({
@@ -1362,9 +1420,9 @@
         return true;
       }
 
-      if (message.type === 'export-copy') {
+      if (message.type === 'export-content') {
         prepareConversationDom()
-          .then(async () => {
+          .then(() => {
             const result = createExport(message.format, buildExportOptions(message));
 
             if (!result) {
@@ -1375,18 +1433,11 @@
               return;
             }
 
-            await writeClipboard(result.content);
-            sendResponse({
-              domTurnCount: result.data.domTurnCount,
-              mayBeIncomplete: result.data.mayBeIncomplete,
-              messageCount: result.data.messageCount,
-              ok: true,
-              title: result.data.title,
-            });
+            sendResponse(buildExportResponse(result, { includeContent: true }));
           })
           .catch(() => {
             sendResponse({
-              error: 'Copy failed. Use the in-page Export button instead.',
+              error: 'Could not prepare export content. Use Export to save a local file instead.',
               ok: false,
             });
           });
