@@ -2,7 +2,7 @@
 
 A Chrome extension that automatically dismisses annoying popups on ChatGPT, focuses the prompt box, and lets you locally export loaded conversations in clean, readable formats.
 
-<img width="1280" height="800" alt="No Thanks, ChatGPT – Chrome Extension" src="https://github.com/user-attachments/assets/a9e0c125-b071-482d-a62a-e0946ef8ec42" />
+<img width="1280" height="800" alt="No Thanks, ChatGPT – Chrome Extension" src="https://github.com/user-attachments/assets/e05c25f6-cad9-473a-ba01-05530783ca13" />
 
 ## What It Does
 - **"Thanks for trying ChatGPT" dialog** — auto-clicks "Stay logged out"
