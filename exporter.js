@@ -1573,18 +1573,11 @@
           cursor: pointer;
           display: inline-flex;
           flex: 0 0 auto;
-          gap: 8px;
           height: 38px;
           justify-content: center;
-          padding: 0 13px;
+          padding: 0;
           transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
-          width: auto;
-        }
-
-        .ntcg-trigger-label {
-          font-size: 13px;
-          font-weight: 700;
-          line-height: 1;
+          width: 38px;
         }
 
         .ntcg-trigger:hover,
@@ -1841,15 +1834,6 @@
             width: min(300px, calc(100vw - 24px));
           }
 
-          .ntcg-trigger {
-            height: 38px;
-            padding: 0;
-            width: 38px;
-          }
-
-          .ntcg-trigger-label {
-            display: none;
-          }
         }
 
         @media (prefers-color-scheme: dark) {
@@ -1892,13 +1876,7 @@
         type: 'button',
       },
       className: 'ntcg-trigger',
-      children: [
-        createIcon('download'),
-        createElement('span', {
-          className: 'ntcg-trigger-label',
-          text: 'Export',
-        }),
-      ],
+      children: [createIcon('download')],
     });
 
     const menu = createElement('section', {

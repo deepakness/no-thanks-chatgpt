@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "No Thanks, ChatGPT",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Blocks ChatGPT popups and lets you locally export loaded conversations as Markdown, JSON, HTML, or TXT.",
   "author": "DeepakNess",
   "action": {
